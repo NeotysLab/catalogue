@@ -1,0 +1,391 @@
+---
+groups:
+- name: catalogue-jobs
+  jobs:
+  - build-catalogue
+  - deploy-catalogue-to-stage
+  - health-check
+  - deploy-catalogue-to-prod
+  - execute-catalogue-load-tests
+  - validate-catalogue-load-test
+  - promote-new-version-catalogue
+  - upload-catalogue-git-release
+
+- name: init-dynatrace
+  jobs: 
+  - init-dynatrace-catalogue
+
+resource_types:
+- name: dynatrace-resource
+  type: docker-image
+  source:
+    repository: mvilliger/dynatrace-resource
+
+resources:
+
+#GitHub Release Repository
+- name: catalogue-release
+  type: github-release
+  source:
+    owner: acm-workshop-concourse
+    repository: catalogue
+    access_token: ((github-access-token))
+
+# GitHub Repositories
+- name: git-pipeline
+  type: git
+  source:
+    branch: master
+    uri: https://github.com/((workshop-repository))/sockshop.git
+
+- name: git-jmeter-as-container
+  type: git
+  source:
+    branch: master
+    uri: https://github.com/((workshop-repository))/jmeter-as-container.git
+
+- name: git-catalogue
+  type: git
+  source:
+    branch: master
+    uri: https://github.com/((workshop-repository))/catalogue.git
+
+- name: dynatrace
+  type: dynatrace-resource
+  source:
+    apitoken: ((apitoken))
+    tenanthost: ((tenanthost))
+
+#- name: catalogue-image
+#  type: docker-image
+#  source:
+#    repository: ((docker-hub-username))/catalogue
+#    username: ((docker-hub-username))
+#    password: ((docker-hub-password))
+
+- name: catalogue-release-bucket
+  type: s3
+  source:
+    region_name: eu-west-1
+    regexp: catalogue/catalogue-(.*)
+    bucket: ((s3-bucket))
+    access_key_id: ((s3-access-key-id))
+    secret_access_key: ((s3-secret-access-key))
+
+- name: version
+  type: semver
+  source:
+    driver: git
+    uri: https://github.com/((workshop-repository))/catalogue.git
+    branch: master
+    file: version
+
+# PCF Environments
+
+- name: pcf-stage
+  type: cf
+  source:
+    api: ((pcf-stage-api))
+    username: ((pcf-stage-deploy-username))
+    password: ((pcf-stage-deploy-password))
+    organization: ((pcf-stage-organization))
+    space: ((pcf-stage-space))
+    skip_cert_check: false
+
+- name: pcf-production
+  type: cf
+  source:
+    api: ((pcf-prod-api))
+    username: ((pcf-prod-deploy-username))
+    password: ((pcf-prod-deploy-password))
+    organization: ((pcf-prod-organization))
+    space: ((pcf-prod-space))
+    skip_cert_check: false
+
+jobs:
+
+# Initialize Dynatrace Custom Device
+
+- name: init-dynatrace-catalogue
+  public: true
+  plan:
+  - aggregate:
+    - get: git-pipeline
+    - get: git-catalogue 
+  - task: init-dynatrace-task
+    file: git-pipeline/deploy/cloud-foundry/ci/tasks/init-dynatrace-task.yml
+    params: 
+      apitoken: ((apitoken))
+      tenanthost: ((tenanthost))
+      APP_REPO: git-catalogue
+
+# CATALOGUE
+
+- name: build-catalogue
+  plan:
+  - get: git-catalogue
+    trigger: true
+  - get: version
+    params: { pre: build }
+  - task: build-catalogue-binary
+    config:
+      platform: linux
+      image_resource:
+        type: docker-image
+        source: {repository: golang, tag: 1.8.7} 
+      inputs:
+      - name: git-catalogue
+      - name: version
+      outputs:
+      - name: workspace
+      run:
+        path: /bin/sh
+        args:
+        - -exc
+        - |
+          # output_dir=workspace
+          # rm git-catalogue/Dockerfile
+          # cp git-catalogue/docker/catalogue/Dockerfile "${output_dir}/Dockerfile"
+          # sh git-catalogue/scripts/build.jb.sh
+          # echo "binary to version" > "${output_dir}/catalogue-$(cat version/number).txt"
+          # cp git-catalogue/glide.yaml git-catalogue/build/docker/catalogue/glide.yaml
+          # cp -R git-catalogue/* "${output_dir}/"
+
+          output_dir=workspace
+          export WORKDIR=$PWD
+          
+          go version
+
+          cd workspace
+          export GOPATH=$PWD
+          mkdir -p src/github.com/dynatrace-sockshop/catalogue/
+          cp -R ../git-catalogue/* src/github.com/dynatrace-sockshop/catalogue/.
+          cd src/github.com/dynatrace-sockshop/catalogue/
+          
+          apt-get update
+          apt-get install git
+          go get -v github.com/Masterminds/glide
+          cd $GOPATH/src/github.com/Masterminds/glide
+          make build
+          export PATH=$PATH:$GOPATH/src/github.com/Masterminds/glide
+          
+          cd $GOPATH/src/github.com/dynatrace-sockshop/catalogue/
+          glide install && CGO_ENABLED=0 go build -a -installsuffix cgo -o catalogue main.go
+          
+          cd $WORKDIR
+          cp $GOPATH/src/github.com/dynatrace-sockshop/catalogue/catalogue "${output_dir}/"
+          mv ${output_dir}/catalogue ${output_dir}/catalogue-$(cat version/number)
+  - put: catalogue-release-bucket
+    params: 
+      file: workspace/catalogue-*
+
+- name: deploy-catalogue-to-stage
+  serial: true
+  public: true
+  plan:
+  - get: git-catalogue
+    trigger: true
+    passed:
+      - build-catalogue
+  - get: git-pipeline
+    trigger: false      
+  - task: prepare-app-manifest
+    file: git-pipeline/deploy/cloud-foundry/ci/tasks/app-manifest-prep.yml
+    params:
+      PCF_APP_SUFFIX: ((pcf-stage-catalogue-suffix)) 
+      APP_REPO: git-catalogue
+  - put: dynatrace
+    params:
+      monspecserviceenvironment: catalogue/Staging
+      pipelinetaskname: deploy-catalogue-to-stage
+      deployversion: v1.0
+      APP_REPO: git-catalogue 
+  - put: pcf-stage
+    params:
+      path: git-catalogue
+      manifest: app-manifest-output/manifest.yml   
+  
+- name: health-check
+  serial: true
+  public: true
+  plan:
+  - aggregate:
+    - get: git-catalogue
+      trigger: true
+      passed:
+        - deploy-catalogue-to-stage
+    - get: git-jmeter-as-container
+    - get: git-pipeline
+  - task: run-health-check
+    file: git-pipeline/deploy/cloud-foundry/ci/tasks/health-test.yml
+    params:
+      APP_REPO: git-jmeter-as-container
+      FUNC_VALIDATION: yes
+      PRODUCTION: false
+      SCRIPT_NAME: basiccheck.jmx
+      PCF_APP_SUFFIX: ((pcf-stage-catalogue-suffix))
+      PCF_APP_DOMAIN: ((pcf-prod-app-domain))
+      DT_LTN: HealthCheck
+      VUCount: 1
+      LoopCount: 1
+
+- name: deploy-catalogue-to-prod
+  serial: true
+  public: true
+  plan:
+  - get: git-catalogue
+    trigger: true
+    passed:
+      - health-check 
+  - get: git-pipeline
+    trigger: false
+  - task: get-current-app-color
+    file: git-pipeline/deploy/cloud-foundry/ci/tasks/current-app-get-info.yml
+    params:
+      PCF_APP_SUFFIX: ((pcf-prod-catalogue-suffix))
+      PCF_API: ((pcf-prod-api))
+      PCF_ORG: ((pcf-prod-organization))
+      PCF_USER: ((pcf-prod-deploy-username))
+      PCF_PWD: ((pcf-prod-deploy-password))
+      PCF_SPACE: ((pcf-prod-space))              
+  - task: prepare-app-manifest
+    file: git-pipeline/deploy/cloud-foundry/ci/tasks/app-manifest-prep.yml
+    params:
+      PCF_APP_SUFFIX: ((pcf-prod-catalogue-suffix)) 
+      APP_REPO: git-catalogue
+      PRODUCTION: true       
+  - put: dynatrace
+    params:
+      monspecserviceenvironment: catalogue/Production
+      pipelinetaskname: deploy-catalogue-to-prod
+      deployversion: v1.0 
+      APP_REPO: git-catalogue      
+  - put: pcf-production
+    params:
+      path: git-catalogue
+      manifest: app-manifest-output/manifest.yml 
+
+- name: execute-catalogue-load-tests
+  serial: true
+  public: true
+  plan:
+  - aggregate:
+    - get: git-catalogue
+      trigger: true
+      passed:
+        - deploy-catalogue-to-prod
+    - get: git-jmeter-as-container
+    - get: git-pipeline
+      trigger: false        
+  - task: get-current-app-color
+    file: git-pipeline/deploy/cloud-foundry/ci/tasks/current-app-get-info.yml
+    params:
+      PCF_APP_SUFFIX: ((pcf-prod-catalogue-suffix))
+      PCF_API: ((pcf-prod-api))
+      PCF_ORG: ((pcf-prod-organization))
+      PCF_USER: ((pcf-prod-deploy-username))
+      PCF_PWD: ((pcf-prod-deploy-password))
+      PCF_SPACE: ((pcf-prod-space))           
+  - task: run-load-test
+    file: git-pipeline/deploy/cloud-foundry/ci/tasks/load-tests.yml
+    params:
+      APP_REPO: git-jmeter-as-container
+      FUNC_VALIDATION: yes
+      PRODUCTION: true
+      SCRIPT_NAME: catalogue_load.jmx
+      PCF_APP_SUFFIX: ((pcf-prod-catalogue-suffix))
+      PCF_APP_DOMAIN: ((pcf-prod-app-domain))
+      DT_LTN: LoadTest
+      VUCount: 5
+      LoopCount: 20   
+  - task: push-dynatrace-monspec-data
+    file: git-pipeline/deploy/cloud-foundry/ci/tasks/push-dynatrace-monspec-data.yml
+    params: 
+      monspecserviceenvironment: catalogue/Production-$NEXT_APP_COLOR
+      apitoken: ((apitoken))
+      tenanthost: ((tenanthost))
+      APP_REPO: git-catalogue   
+
+- name: validate-catalogue-load-test
+  serial: true
+  public: true
+  plan:
+  - get: git-catalogue
+    trigger: true
+    passed:
+      - execute-catalogue-load-tests
+  - get: git-pipeline
+    trigger: false      
+  - task: get-current-app-color
+    file: git-pipeline/deploy/cloud-foundry/ci/tasks/current-app-get-info.yml
+    params:
+      PCF_APP_SUFFIX: ((pcf-prod-catalogue-suffix))
+      PCF_API: ((pcf-prod-api))
+      PCF_ORG: ((pcf-prod-organization))
+      PCF_USER: ((pcf-prod-deploy-username))
+      PCF_PWD: ((pcf-prod-deploy-password))
+      PCF_SPACE: ((pcf-prod-space))       
+  - task: validate-via-monspec
+    file: git-pipeline/deploy/cloud-foundry/ci/tasks/validate-via-monspec.yml
+    params: 
+      monspeccomparison: catalogue/Production-$NEXT_APP_COLOR\ToProduction-$CURRENT_APP_COLOR\Last5m
+      apitoken: ((apitoken))
+      tenanthost: ((tenanthost))
+      APP_REPO: git-catalogue     
+
+- name: promote-new-version-catalogue
+  serial: true
+  public: true
+  plan:
+  - get: git-catalogue
+    trigger: true
+    passed:
+      - execute-catalogue-load-tests
+  - get: version
+    params: { bump: patch }
+  - get: git-pipeline
+    trigger: false      
+  - task: get-current-app-color
+    file: git-pipeline/deploy/cloud-foundry/ci/tasks/current-app-get-info.yml
+    params:
+      PCF_APP_SUFFIX: ((pcf-prod-catalogue-suffix))
+      PCF_API: ((pcf-prod-api))
+      PCF_ORG: ((pcf-prod-organization))
+      PCF_USER: ((pcf-prod-deploy-username))
+      PCF_PWD: ((pcf-prod-deploy-password))
+      PCF_SPACE: ((pcf-prod-space))   
+  - task: switch-app-routes
+    file: git-pipeline/deploy/cloud-foundry/ci/tasks/update-routes.yml
+    params:
+      PCF_APP_SUFFIX: ((pcf-prod-catalogue-suffix))
+      PCF_API: ((pcf-prod-api))
+      PCF_ORG: ((pcf-prod-organization))
+      PCF_USER: ((pcf-prod-deploy-username))
+      PCF_PWD: ((pcf-prod-deploy-password))
+      PCF_SPACE: ((pcf-prod-space))
+      PCF_APP_DOMAIN: ((pcf-prod-app-domain))
+
+- name: upload-catalogue-git-release
+  public: true
+  plan:
+  - aggregate:
+    - get: git-catalogue
+      trigger: true
+      passed: 
+        - promote-new-version-catalogue
+    - get: catalogue-release-bucket
+    - get: git-pipeline
+    - get: version
+      params: { pre: build }
+  - task: create-catalogue-release-info
+    file: git-pipeline/deploy/cloud-foundry/ci/tasks/prepare-release.yml
+    params:
+      APP_NAME: catalogue
+  - put: catalogue-release
+    params:
+      name: prepared-release/name
+      tag: prepared-release/tag
+      globs:
+      - catalogue-release-bucket/catalogue-*
+#  - put: version
+#    params: { file: version/number }    
