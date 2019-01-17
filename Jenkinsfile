@@ -18,6 +18,7 @@ pipeline {
     NL_DT_TAG="app:${env.APP_NAME},environment:dev"
     OUTPUTSANITYCHECK="$WORKSPACE/infrastructure/sanitycheck.json"
     NEOLOAD_ASCODEFILE="$WORKSPACE/test/neoload/catalogue_neoload.yaml"
+    NEOLOAD_ANOMALIEDETECTIONFILE="$WORKSPACE/monspec/carts_anomamlieDection.json"
   }
   stages {
     stage('Go build') {
@@ -133,11 +134,9 @@ pipeline {
         sh "sed -i 's/PORT_TO_REPLACE/ 80'  ${NEOLOAD_ASCODEFILE}"
         sh "sed -i 's/DTID_TO_REPLACE/ ${DYNATRACEID}'  ${NEOLOAD_ASCODEFILE}"
         sh "sed -i 's/APIKEY_TO_REPLACE/ ${DYNATRACEAPIKEY}'  ${NEOLOAD_ASCODEFILE}"
-        sh "sed -i 's/METRIC_TO_REPLACE/ com.dynatrace.builtin:service.responsetime'  ${NEOLOAD_ASCODEFILE}"
-        sh "sed -i 's/OPERATOR_TO_REPLACE/ ABOVE'  ${NEOLOAD_ASCODEFILE}"
+        sh "sed -i 's/JSONFILE_TO_REPLACE/ ${NEOLOAD_ANOMALIEDETECTIONFILE}'  ${NEOLOAD_ASCODEFILE}"
         sh "sed -i 's/TAGS_TO_REPLACE/ ${NL_DT_TAG}'  ${NEOLOAD_ASCODEFILE}"
-        sh "sed -i 's/TYPEANOMALIE_TO_REPLACE/ PERFORMANCE'  ${NEOLOAD_ASCODEFILE}"
-        sh "sed -i 's/VALUEANOMALIE_TO_REPLACE/ 100'  ${NEOLOAD_ASCODEFILE}"
+
         sleep 60
 
         container('neoload') {

@@ -13,16 +13,10 @@ variables:
     value: APIKEY_TO_REPLACE
   - name: dynatraceid
     value: DTID_TO_REPLACE
-  - name: com.dynatrace.builtin:service.responsetime
-    value: METRIC_TO_REPLACE
-  - name: operator
-    value: OPERATOR_TO_REPLACE
+  - name: jsonAnomalieDetectionFile
+    value: JSONFILE_TO_REPLACE
   - name: TAGS
     value: TAGS_TO_REPLACE
-  - name: typeOfAnomalie
-    value: TYPEANOMALIE_TO_REPLACE
-  - name: value_anaomalie
-    value: VALUEANOMALIE_TO_REPLACE
 servers:
 - name: catalogue_host
   host: ${server_host}
