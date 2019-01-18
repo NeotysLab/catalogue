@@ -18,7 +18,10 @@ pipeline {
     NL_DT_TAG="app:${env.APP_NAME},environment:dev"
     OUTPUTSANITYCHECK="$WORKSPACE/infrastructure/sanitycheck.json"
     NEOLOAD_ASCODEFILE="$WORKSPACE/test/neoload/catalogue_neoload.yaml"
-    NEOLOAD_ANOMALIEDETECTIONFILE="$WORKSPACE/monspec/carts_anomamlieDection.json"
+    NEOLOAD_ANOMALIEDETECTIONFILE="$WORKSPACE/monspec/catalogue_anomamlieDection.json"
+    BASICCHECKURI="/health"
+    TAGURI="/tag"
+    GITORIGIN="neotyslab"
   }
   stages {
     stage('Go build') {
@@ -35,7 +38,6 @@ pipeline {
           _TAG = "${env.DOCKER_REGISTRY_URL}:5000/sockshop-registry/${env.ARTEFACT_ID}"
           _TAG_DEV = "${_TAG}:${_VERSION}-${env.BUILD_NUMBER}"
           _TAG_STAGING = "${_TAG}:${_VERSION}"
-           sh "chmod -R 777 $WORKSPACE/target/neoload/"
         }
         container('gobuilder') {
           sh '''
@@ -128,8 +130,8 @@ pipeline {
       }
       steps {
         echo "Waiting for the service to start...
-        sh "sed -i 's/CHECK_TO_REPLACE/ /health'  ${NEOLOAD_ASCODEFILE}"
-        sh "sed -i 's/TAGURL_TO_REPLACE/ /tag'  ${NEOLOAD_ASCODEFILE}"
+        sh "sed -i 's/CHECK_TO_REPLACE/ ${BASICCHECKURI}'  ${NEOLOAD_ASCODEFILE}"
+        sh "sed -i 's/TAGURL_TO_REPLACE/ ${TAGURI}'  ${NEOLOAD_ASCODEFILE}"
         sh "sed -i 's/HOST_TO_REPLACE/ ${env.APP_NAME}.dev.svc'  ${NEOLOAD_ASCODEFILE}"
         sh "sed -i 's/PORT_TO_REPLACE/ 80'  ${NEOLOAD_ASCODEFILE}"
         sh "sed -i 's/DTID_TO_REPLACE/ ${DYNATRACEID}'  ${NEOLOAD_ASCODEFILE}"
@@ -137,7 +139,7 @@ pipeline {
         sh "sed -i 's/JSONFILE_TO_REPLACE/ ${NEOLOAD_ANOMALIEDETECTIONFILE}'  ${NEOLOAD_ASCODEFILE}"
         sh "sed -i 's/TAGS_TO_REPLACE/ ${NL_DT_TAG}'  ${NEOLOAD_ASCODEFILE}"
 
-        sleep 60
+        sleep 300
 
         container('neoload') {
 
@@ -145,7 +147,7 @@ pipeline {
 
               sh "mkdir -p /home/jenkins/.neotys/neoload"
               sh "cp $WORKSPACE/infrastructure/infrastructure/neoload/license.lic /home/jenkins/.neotys/neoload/"
-              status =sh(script:"/neoload/bin/NeoLoadCmd -project $WORKSPACE/test/neoload/load_template/load_template.nlp ${NEOLOAD_ASCODEFILE} -testResultName HealthCheck_${BUILD_NUMBER} -description HealthCheck_${BUILD_NUMBER} -nlweb -L BasicCheck=$WORKSPACE/infrastructure/infrastructure/neoload/lg/remote.txt -L Population_Dynatrace_Integration=$WORKSPACE/infrastructure/infrastructure/neoload/lg/local.txt -nlwebToken $NLAPIKEY -launch BasicCheck -noGUI", returnStatus: true)
+              status =sh(script:"/neoload/bin/NeoLoadCmd -project $WORKSPACE/test/neoload/load_template/load_template.nlp ${NEOLOAD_ASCODEFILE} -testResultName HealthCheck_catalogue_${BUILD_NUMBER} -description HealthCheck_catalogue_${BUILD_NUMBER} -nlweb -L BasicCheck=$WORKSPACE/infrastructure/infrastructure/neoload/lg/remote.txt -L Population_Dynatrace_Integration=$WORKSPACE/infrastructure/infrastructure/neoload/lg/local.txt -nlwebToken $NLAPIKEY -launch BasicCheck -noGUI", returnStatus: true)
 
               if (status != 0) {
                         currentBuild.result = 'FAILED'
@@ -159,7 +161,7 @@ pipeline {
               steps {
                 container('neoload') {
                   script {
-                         status =sh(script:"/neoload/bin/NeoLoadCmd -project $WORKSPACE/test/neoload/load_template/load_template.nlp ${NEOLOAD_ASCODEFILE}  -testResultName DynatraceSanityCheck_${BUILD_NUMBER} -description DynatraceSanityCheck_${BUILD_NUMBER} -nlweb -L  Population_Dynatrace_SanityCheck=$WORKSPACE/infrastructure/infrastructure/neoload/lg/local.txt -nlwebToken $NLAPIKEY -variables host=${env.APP_NAME}.dev,port=80 -launch DYNATRACE_SANITYCHECK  -noGUI", returnStatus: true)
+                         status =sh(script:"/neoload/bin/NeoLoadCmd -project $WORKSPACE/test/neoload/load_template/load_template.nlp ${NEOLOAD_ASCODEFILE}  -testResultName DynatraceSanityCheck_catalogue_${BUILD_NUMBER} -description DynatraceSanityCheck_catalogue_${BUILD_NUMBER} -nlweb -L  Population_Dynatrace_SanityCheck=$WORKSPACE/infrastructure/infrastructure/neoload/lg/local.txt -nlwebToken $NLAPIKEY -variables host=${env.APP_NAME}.dev,port=80 -launch DYNATRACE_SANITYCHECK  -noGUI", returnStatus: true)
 
                          if (status != 0) {
                               currentBuild.result = 'FAILED'
@@ -174,7 +176,7 @@ pipeline {
                        sh "git config --global user.email ${env.GITHUB_USER_EMAIL}"
                        sh "git add ${OUTPUTSANITYCHECK}"
                        sh "git commit -m 'Update Sanity_Check_${BUILD_NUMBER} ${env.APP_NAME} version ${env.VERSION}'"
-                       sh "git push https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/${env.GITHUB_ORGANIZATION}/cats origin master"
+                       sh "git push https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/${env.GITHUB_ORGANIZATION}/catalogue ${GITORIGIN} master"
                    }
                  }
 
@@ -190,7 +192,7 @@ pipeline {
         container('neoload') {
           script {
 
-           status =sh(script:"/neoload/bin/NeoLoadCmd -project $WORKSPACE/test/neoload/load_template/load_template.nlp ${NEOLOAD_ASCODEFILE} -testResultName FuncCheck_${BUILD_NUMBER} -description FuncCheck_${BUILD_NUMBER} -nlweb -L CatalogueLoad=$WORKSPACE/infrastructure/infrastructure/neoload/lg/remote.txt -L Population_Dynatrace_Integration=$WORKSPACE/infrastructure/infrastructure/neoload/lg/local.txt -nlwebToken $NLAPIKEY -launch CatalogueLoad -noGUI", returnStatus: true)
+           status =sh(script:"/neoload/bin/NeoLoadCmd -project $WORKSPACE/test/neoload/load_template/load_template.nlp ${NEOLOAD_ASCODEFILE} -testResultName FuncCheck_catalogue_${BUILD_NUMBER} -description FuncCheck_catalogue_${BUILD_NUMBER} -nlweb -L CatalogueLoad=$WORKSPACE/infrastructure/infrastructure/neoload/lg/remote.txt -L Population_Dynatrace_Integration=$WORKSPACE/infrastructure/infrastructure/neoload/lg/local.txt -nlwebToken $NLAPIKEY -launch CatalogueLoad -noGUI", returnStatus: true)
 
             if (status != 0) {
                       currentBuild.result = 'FAILED'

@@ -24,32 +24,34 @@ servers:
 user_paths:
 - name: CatalogueCheck
   actions:
-  - transaction:
-      name: Basic Check
-      steps:
-      - request:
-          url: /${basicpath}
-          server: catalogue_host
-          method: GET
+    steps:
+    - transaction:
+        name: Basic Check
+        steps:
+        - request:
+            url: /${basicpath}
+            server: catalogue_host
+            method: GET
             headers:
-            - Cache-Control: no-cache
-            - Content-Type: application/json
-            - json: true
-      - think_time: 250ms
+              - Cache-Control: no-cache
+              - Content-Type: application/json
+              - json: true
+    - think_time: 250ms
 - name: CatalogueLoad
   actions:
-  - transaction:
-      name: Catalogue Health
-      steps:
-      - request:
-          url: /${basicpath}
-          server: catalogue_host
-          method: GET
+    steps:
+    - transaction:
+        name: Catalogue Health
+        steps:
+        - request:
+            url: /${basicpath}
+            server: catalogue_host
+            method: GET
             headers:
-            - Cache-Control: no-cache
-            - Content-Type: application/json
-            - json: true
-  - think_time: 250ms
+              - Cache-Control: no-cache
+              - Content-Type: application/json
+              - json: true
+    - think_time: 250ms
     - transaction:
         name: Tagging
         steps:
@@ -57,11 +59,11 @@ user_paths:
             url: /${tagurl}
             server: catalogue_host
             method: GET
-              headers:
+            headers:
               - Cache-Control: no-cache
               - Content-Type: application/json
               - json: true
-        - think_time: 250ms
+    - think_time: 250ms
 populations:
 - name: BasicCheck
   user_paths:
@@ -86,7 +88,7 @@ scenarios:
   populations:
   - name: CatalogueLoad
     constant_load:
-      users: 59
+      users: 49
       duration: 5m
       rampup: 30s
   - name: Population_Dynatrace_Integration
