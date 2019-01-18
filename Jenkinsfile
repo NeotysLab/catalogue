@@ -129,7 +129,7 @@ pipeline {
         }
       }
       steps {
-        echo "Waiting for the service to start...
+        echo "Waiting for the service to start..."
         sh "sed -i 's/CHECK_TO_REPLACE/ ${BASICCHECKURI}'  ${NEOLOAD_ASCODEFILE}"
         sh "sed -i 's/TAGURL_TO_REPLACE/ ${TAGURI}'  ${NEOLOAD_ASCODEFILE}"
         sh "sed -i 's/HOST_TO_REPLACE/ ${env.APP_NAME}.dev.svc'  ${NEOLOAD_ASCODEFILE}"
