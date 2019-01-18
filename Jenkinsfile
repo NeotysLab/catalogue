@@ -19,8 +19,8 @@ pipeline {
     OUTPUTSANITYCHECK="$WORKSPACE/infrastructure/sanitycheck.json"
     NEOLOAD_ASCODEFILE="$WORKSPACE/test/neoload/catalogue_neoload.yaml"
     NEOLOAD_ANOMALIEDETECTIONFILE="$WORKSPACE/monspec/catalogue_anomamlieDection.json"
-    BASICCHECKURI="/health"
-    TAGURI="/tag"
+    BASICCHECKURI="health"
+    TAGURI="tag"
     GITORIGIN="neotyslab"
   }
   stages {
