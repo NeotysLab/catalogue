@@ -130,14 +130,14 @@ pipeline {
       }
       steps {
         echo "Waiting for the service to start..."
-        sh "sed -i 's/CHECK_TO_REPLACE/ ${BASICCHECKURI}'  ${NEOLOAD_ASCODEFILE}"
-        sh "sed -i 's/TAGURL_TO_REPLACE/ ${TAGURI}'  ${NEOLOAD_ASCODEFILE}"
-        sh "sed -i 's/HOST_TO_REPLACE/ ${env.APP_NAME}.dev.svc'  ${NEOLOAD_ASCODEFILE}"
-        sh "sed -i 's/PORT_TO_REPLACE/ 80'  ${NEOLOAD_ASCODEFILE}"
-        sh "sed -i 's/DTID_TO_REPLACE/ ${DYNATRACEID}'  ${NEOLOAD_ASCODEFILE}"
-        sh "sed -i 's/APIKEY_TO_REPLACE/ ${DYNATRACEAPIKEY}'  ${NEOLOAD_ASCODEFILE}"
-        sh "sed -i 's/JSONFILE_TO_REPLACE/ ${NEOLOAD_ANOMALIEDETECTIONFILE}'  ${NEOLOAD_ASCODEFILE}"
-        sh "sed -i 's/TAGS_TO_REPLACE/ ${NL_DT_TAG}'  ${NEOLOAD_ASCODEFILE}"
+        sh "sed -i 's/CHECK_TO_REPLACE/${BASICCHECKURI}'  ${NEOLOAD_ASCODEFILE}"
+        sh "sed -i 's/TAGURL_TO_REPLACE/${TAGURI}'  ${NEOLOAD_ASCODEFILE}"
+        sh "sed -i 's/HOST_TO_REPLACE/${env.APP_NAME}.dev.svc'  ${NEOLOAD_ASCODEFILE}"
+        sh "sed -i 's/PORT_TO_REPLACE/80'  ${NEOLOAD_ASCODEFILE}"
+        sh "sed -i 's/DTID_TO_REPLACE/${DYNATRACEID}'  ${NEOLOAD_ASCODEFILE}"
+        sh "sed -i 's/APIKEY_TO_REPLACE/${DYNATRACEAPIKEY}'  ${NEOLOAD_ASCODEFILE}"
+        sh "sed -i 's/JSONFILE_TO_REPLACE/${NEOLOAD_ANOMALIEDETECTIONFILE}'  ${NEOLOAD_ASCODEFILE}"
+        sh "sed -i 's/TAGS_TO_REPLACE/${NL_DT_TAG}'  ${NEOLOAD_ASCODEFILE}"
 
         sleep 300
 
